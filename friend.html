@@ -5430,6 +5430,7 @@
   function hhSingle(){ try { return localStorage.getItem(HH_KEY) !== "2"; } catch(e) { return true; } }
   var _myRoleHH = myRole; myRole = function(){ return hhSingle() ? "夫" : _myRoleHH(); };
   var _fapHH = fireAdjPeople; fireAdjPeople = function(){ var r = _fapHH(); return hhSingle() ? r.filter(function(p){ return p.who !== "妻"; }) : r; };
+  var _rkHH = renderKeypad; renderKeypad = function(){ if (hhSingle()) { kp.split = "夫"; kp.payer = "夫"; } return _rkHH.apply(this, arguments); };
   (function(){
     var sel = document.getElementById("hhSel");
     if (sel) { sel.value = hhSingle() ? "1" : "2"; sel.addEventListener("change", function(){ try { localStorage.setItem(HH_KEY, sel.value); } catch(e) {} location.reload(); }); }
@@ -5456,10 +5457,29 @@
         list.forEach(function(n){
           var p = n.parentNode; if (!p || /^(SCRIPT|STYLE|TEXTAREA)$/.test(p.nodeName)) return;
           var t = n.nodeValue, tt = t.trim(); if (!tt) return;
-          if (/^[▾▸] 妻$/.test(tt)) { var hp = p.closest(".row,.grp,div") || p; if (hp.style.display !== "none") hp.style.display = "none"; return; }
+          if (/^[▾▸] (妻|家族|共通)$/.test(tt)) { var hp = p.closest(".row,.grp,div") || p; if (hp.style.display !== "none") hp.style.display = "none"; return; }
           if (tt === "妻" && /^(BUTTON|OPTION|LABEL|SPAN|DIV)$/.test(p.nodeName)) { if (p.nodeName === "OPTION") { p.hidden = true; p.disabled = true; } else if (p.style.display !== "none") p.style.display = "none"; return; }
           for (var i = 0; i < RULES.length; i++) { var r = RULES[i], src = (r[0].source.charAt(0) === "^") ? tt : t; if (r[0].test(src)) { var nv = src.replace(r[0], r[1]); if (nv !== src) { n.nodeValue = (src === tt ? t.replace(tt, nv) : nv); } return; } }
           if (/夫(?!婦)/.test(t) && !(p.closest && p.closest("#hhCard"))) n.nodeValue = t.replace(/夫(?!婦)/g, "自分");
+        });
+        var GONE = { "全体": 1, "家族": 1, "共通": 1, "妻": 1 };
+        document.querySelectorAll("select").forEach(function(sl){
+          if (sl.id === "hhSel") return;
+          var opts = Array.prototype.slice.call(sl.options), has = opts.some(function(o){ return o.value === "夫"; });
+          if (!has) return;
+          opts.forEach(function(o){ if (GONE[o.value] && !o.hidden) { o.hidden = true; o.disabled = true; } });
+          var cur = sl.options[sl.selectedIndex];
+          if (cur && cur.hidden) { sl.value = "夫"; sl.dispatchEvent(new Event("change", { bubbles: true })); }
+        });
+        document.querySelectorAll(".scope-bar, .kp-pills").forEach(function(bar){
+          if (bar.id === "lgSubBar") return;
+          var bs = Array.prototype.slice.call(bar.querySelectorAll("button"));
+          if (!bs.length) return;
+          var touched = false;
+          bs.forEach(function(b){ var t = (b.textContent || "").trim(); if (GONE[t] || t === "合計" || b.dataset.kpsplit === "共通" || b.dataset.kpsplit === "妻") { if (b.style.display !== "none") b.style.display = "none"; touched = true; } });
+          var vis = bs.filter(function(b){ return b.style.display !== "none" && getComputedStyle(b).display !== "none"; });
+          if (touched && vis.length <= 1) { if (bar.style.display !== "none") bar.style.display = "none"; var act = bs.filter(function(b){ return b.classList.contains("active") || b.classList.contains("on"); })[0]; if (vis[0] && (!act || act.style.display === "none")) vis[0].click(); }
+          else if (touched) { var a2 = bs.filter(function(b){ return b.classList.contains("active"); })[0]; if (a2 && a2.style.display === "none" && vis[0]) vis[0].click(); }
         });
       } catch(e) { console.error(e); }
       busy = false;

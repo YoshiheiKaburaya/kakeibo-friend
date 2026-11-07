@@ -388,6 +388,8 @@
   .kp-hidebtn{position:absolute;right:12px;top:-15px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:3px 12px;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.12);cursor:pointer;}
   .kp-showbtn{position:fixed;right:14px;bottom:16px;z-index:60;border:none;background:var(--coral,#FF6B5B);color:#fff;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;}
   .kp-types button[data-kptype="invest"].on{background:var(--teal,#12B3A0);}
+
+  body.hh1 [data-bdscope="妻"], body.hh1 [data-bs="妻"], body.hh1 [data-scope="妻"], body.hh1 [data-sc="妻"], body.hh1 [data-kpsplit="妻"], body.hh1 [data-kppayer="妻"] { display:none !important; }
 </style>
 </head>
 <body>
@@ -950,6 +952,11 @@
         <h3>🔒 非公開分の合計表示</h3>
         <p class="stat-sub" style="margin-bottom:10px;">「配偶者に見せない」にした支出・収入を、中身（メモ・日付・小カテゴリ）は隠したまま、<b>月ごとのカテゴリ合計だけ</b>配偶者に表示します。</p>
         <label class="field" style="display:flex; flex-direction:row; align-items:center; gap:8px;"><input type="checkbox" id="hiddenShareChk"><span style="margin:0;">カテゴリの合計金額だけ配偶者に見せる</span></label>
+      </div>
+      <div class="card accent-sun" id="hhCard">
+        <h3>👤 世帯の人数</h3>
+        <p class="stat-sub" style="margin-bottom:10px;">「1人」にすると、夫・妻の区別をなくして、ひとり用の画面になります。切り替えても記録は消えません。</p>
+        <label class="field"><span>人数</span><select id="hhSel"><option value="1">1人（ひとり暮らし・独身）</option><option value="2">2人（夫婦）</option></select></label>
       </div>
       <div class="card">
         <h3>この端末を使う人</h3>
@@ -5417,6 +5424,50 @@
     renderLedger(); renderAssets(); renderFixedCosts(); refreshHeader();
     runInvestSim(); runInsurance(); runWidowPension(); runPension(); runFireWithSync();
   }
+
+  // ===== 友達用：世帯の人数（1人／2人） =====
+  var HH_KEY = "kakeibo_household";
+  function hhSingle(){ try { return localStorage.getItem(HH_KEY) !== "2"; } catch(e) { return true; } }
+  var _myRoleHH = myRole; myRole = function(){ return hhSingle() ? "夫" : _myRoleHH(); };
+  var _fapHH = fireAdjPeople; fireAdjPeople = function(){ var r = _fapHH(); return hhSingle() ? r.filter(function(p){ return p.who !== "妻"; }) : r; };
+  (function(){
+    var sel = document.getElementById("hhSel");
+    if (sel) { sel.value = hhSingle() ? "1" : "2"; sel.addEventListener("change", function(){ try { localStorage.setItem(HH_KEY, sel.value); } catch(e) {} location.reload(); }); }
+    if (!hhSingle()) return;
+    document.body.classList.add("hh1");
+    var busy = false, queued = false;
+    var HIDE_IDS = [["wpWho","card"],["myRoleSel","card"],["splitHusband","card"],["hiddenShareChk","card"],["wifeEffective","card"],["birthW","field"],["fireAdjPAgeW","field"],["fireAdjPenW","field"],["fireAdjNoteW","self"]];
+    var RULES = [
+      [/夫婦の毎月の収入（夫 (¥[\d,]+) ＋ 妻 ¥[\d,]+）/, "毎月の収入（$1）"],
+      [/夫・妻の個人予算の合計/, "個人予算の合計"],
+      [/^家族（共通・割り勘）$/, "共通"],
+      [/^夫婦合計$/, "合計"],
+      [/^夫$/, "自分"],
+      [/^夫：/, "自分："],
+      [/^夫の/, "自分の"],
+      [/^([▾▸]) 夫$/, "$1 自分"]
+    ];
+    function apply(){
+      if (busy) return; busy = true;
+      try {
+        HIDE_IDS.forEach(function(h){ var el = document.getElementById(h[0]); if (!el) return; var t = h[1] === "card" ? el.closest(".card") : (h[1] === "field" ? el.closest("label") : el); if (t && t.style.display !== "none") t.style.display = "none"; });
+        var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null), n, list = [];
+        while ((n = w.nextNode())) list.push(n);
+        list.forEach(function(n){
+          var p = n.parentNode; if (!p || /^(SCRIPT|STYLE|TEXTAREA)$/.test(p.nodeName)) return;
+          var t = n.nodeValue, tt = t.trim(); if (!tt) return;
+          if (/^[▾▸] 妻$/.test(tt)) { var hp = p.closest(".row,.grp,div") || p; if (hp.style.display !== "none") hp.style.display = "none"; return; }
+          if (tt === "妻" && /^(BUTTON|OPTION|LABEL|SPAN|DIV)$/.test(p.nodeName)) { if (p.nodeName === "OPTION") { p.hidden = true; p.disabled = true; } else if (p.style.display !== "none") p.style.display = "none"; return; }
+          for (var i = 0; i < RULES.length; i++) { var r = RULES[i], src = (r[0].source.charAt(0) === "^") ? tt : t; if (r[0].test(src)) { var nv = src.replace(r[0], r[1]); if (nv !== src) { n.nodeValue = (src === tt ? t.replace(tt, nv) : nv); } return; } }
+          if (/夫(?!婦)/.test(t) && !(p.closest && p.closest("#hhCard"))) n.nodeValue = t.replace(/夫(?!婦)/g, "自分");
+        });
+      } catch(e) { console.error(e); }
+      busy = false;
+    }
+    function sched(){ if (queued) return; queued = true; requestAnimationFrame(function(){ queued = false; apply(); }); }
+    new MutationObserver(sched).observe(document.body, { childList: true, subtree: true, characterData: true });
+    apply();
+  })();
   initSync();
 })();
 </script>
